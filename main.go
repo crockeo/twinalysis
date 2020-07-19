@@ -7,10 +7,12 @@ import (
 	"os"
 
 	"github.com/dghubble/go-twitter/twitter"
-	"github.com/jedib0t/go-pretty/v6/table"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
+
+	"github.com/crockeo/twinalysis/module"
+	"github.com/crockeo/twinalysis/module/averages"
 )
 
 const (
@@ -20,6 +22,8 @@ const (
 
 	DEFAULT_PERMS os.FileMode = 0755
 )
+
+var MODULES = []module.Module{averages.Averages{}}
 
 func readKey(path string) (string, error) {
 	rawKey, err := ioutil.ReadFile(path)
@@ -179,49 +183,47 @@ func collectTweets(client *twitter.Client, user string) ([]twitter.Tweet, error)
 	return tweets, nil
 }
 
+func getModule(name string) (*module.Module, error) {
+	for _, module := range MODULES {
+		if module.Name() == name {
+			return &module, nil
+		}
+	}
+	return nil, fmt.Errorf("No such module '%s'", name)
+}
+
 func main() {
 	client, err := twitterClient()
 	if err != nil {
 		panic(err)
 	}
 
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(
-		table.Row{"Username", "Tweets", "Favorites", "Retweets", "Replies", "Quotes"},
-	)
-
-	for _, username := range os.Args[1:] {
-		tweets, err := collectTweets(client, username)
-		if err != nil {
-			panic(err)
-		}
-
-		tweetCount := 0
-		favorites := 0
-		retweets := 0
-		replies := 0
-		quotes := 0
-		for _, tweet := range tweets {
-			tweetCount++
-			favorites += tweet.FavoriteCount
-			retweets += tweet.RetweetCount
-			replies += tweet.ReplyCount
-			quotes += tweet.QuoteCount
-		}
-
-		norm := float32(len(tweets))
-		t.AppendRow(
-			table.Row{
-				username,
-				tweetCount,
-				float32(favorites) / norm,
-				float32(retweets) / norm,
-				float32(replies) / norm,
-				float32(quotes) / norm,
-			},
-		)
+	if len(os.Args) < 3 {
+		fmt.Println("Insufficient arguments")
+		return
 	}
 
-	t.Render()
+	module, err := getModule(os.Args[1])
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	tweetsByUsername := map[string][]twitter.Tweet{}
+	for _, username := range os.Args[2:] {
+		tweets, err := collectTweets(client, username)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		tweetsByUsername[username] = tweets
+	}
+
+	err = (*module).AnalyzeTweets(tweetsByUsername)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
 }
