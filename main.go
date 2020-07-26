@@ -81,12 +81,25 @@ func main() {
 	}
 
 	tweetEntryChan := make(chan module.TweetEntry, 10)
-	// TODO: Manage tweetEntryChan from main.go (instead of within CollectTweets)
+	errChan := make(chan error)
 
-	// TODO: Retrieve errors from CollectTweets
-	go tweets.CollectTweets(client, tweetEntryChan, os.Args[2:])
-	err = (*mod).AnalyzeTweets(tweetEntryChan)
+	go (*mod).AnalyzeTweets(tweetEntryChan, errChan)
+	err = tweets.CollectTweets(client, tweetEntryChan, os.Args[2:])
 	if err != nil {
 		panic(err)
 	}
+
+	for {
+		if len(tweetEntryChan) == 0 {
+			break
+		}
+	}
+	close(tweetEntryChan)
+
+	err = <-errChan
+	if err != nil {
+		panic(err)
+	}
+
+	close(errChan)
 }

@@ -31,7 +31,7 @@ func (a Averages) Name() string {
 	return "averages"
 }
 
-func (a Averages) AnalyzeTweets(tweetEntryChan <-chan module.TweetEntry) error {
+func (a Averages) AnalyzeTweets(tweetEntryChan <-chan module.TweetEntry, errChan chan<- error) {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 	t.AppendHeader(
@@ -61,5 +61,5 @@ func (a Averages) AnalyzeTweets(tweetEntryChan <-chan module.TweetEntry) error {
 	}
 	t.Render()
 
-	return nil
+	errChan <- nil
 }

@@ -45,7 +45,6 @@ func fetchTweets(client *twitter.Client, username string, tweetDir string) error
 				},
 			)
 			if err != nil {
-				errChan <- err
 				return
 			}
 			if len(tweetBatch) == 0 {
@@ -67,7 +66,6 @@ func fetchTweets(client *twitter.Client, username string, tweetDir string) error
 		for tweet := range tweetChan {
 			data, err := json.Marshal(tweet)
 			if err != nil {
-				errChan <- err
 				return
 			}
 
@@ -77,7 +75,6 @@ func fetchTweets(client *twitter.Client, username string, tweetDir string) error
 				DEFAULT_PERMS,
 			)
 			if err != nil {
-				errChan <- err
 				return
 			}
 		}
@@ -107,8 +104,6 @@ func readTweet(path string) (twitter.Tweet, error) {
 	return tweet, nil
 }
 
-// CollectTweets collects all tweets from a particular user. This may be sourced from querying the
-// Twitter API or from a local on-disk cache.
 func CollectTweets(client *twitter.Client, tweetEntryChan chan<- module.TweetEntry, usernames []string) error {
 	// TODO: Optimize this whole thing.
 	//
@@ -124,7 +119,7 @@ func CollectTweets(client *twitter.Client, tweetEntryChan chan<- module.TweetEnt
 	//   2. Saves tweet to disk for no reason, could just be directly funneled out the tweetEntryChan
 	cwd, err := os.Getwd()
 	if err != nil {
-		return nil
+		return err
 	}
 	for _, username := range usernames {
 		tweetDir := path.Join(cwd, "data", username)
@@ -136,13 +131,12 @@ func CollectTweets(client *twitter.Client, tweetEntryChan chan<- module.TweetEnt
 			}
 
 			if err = fetchTweets(client, username, tweetDir); err != nil {
-				return err
 			}
 		}
 
 		files, err := ioutil.ReadDir(tweetDir)
 		if err != nil {
-			return nil
+			return err
 		}
 
 		for _, file := range files {
@@ -152,11 +146,10 @@ func CollectTweets(client *twitter.Client, tweetEntryChan chan<- module.TweetEnt
 			}
 			tweetEntryChan <- module.TweetEntry{
 				Username: username,
-				Tweet: tweet,
+				Tweet:    tweet,
 			}
 		}
 	}
 
-	close(tweetEntryChan)
 	return nil
 }

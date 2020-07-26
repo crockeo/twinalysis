@@ -13,5 +13,5 @@ type Module interface {
 	Name() string
 
 	// AnalyzeTweets performs some analysis over a collection of tweets.
-	AnalyzeTweets(<-chan TweetEntry) error
+	AnalyzeTweets(<-chan TweetEntry, chan<- error)
 }
