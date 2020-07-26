@@ -8,6 +8,8 @@ import (
 	"path"
 
 	"github.com/dghubble/go-twitter/twitter"
+
+	"github.com/crockeo/twinalysis/module"
 )
 
 const (
@@ -107,44 +109,54 @@ func readTweet(path string) (twitter.Tweet, error) {
 
 // CollectTweets collects all tweets from a particular user. This may be sourced from querying the
 // Twitter API or from a local on-disk cache.
-func CollectTweets(client *twitter.Client, username string) ([]twitter.Tweet, error) {
+func CollectTweets(client *twitter.Client, tweetEntryChan chan<- module.TweetEntry, usernames []string) error {
+	// TODO: Optimize this whole thing.
+	//
+	// Current architecture:
+	//   1. If cache does not exist
+	//     1.a. Spin up gofunc to retrieve tweets
+	//     1.b. Spin up gofunc to save tweets
+	//     1.c. Wait until all tweets have been saved to disk
+	//   2. Read tweets from disk
+	//
+	// Problems:
+	//   1. Never updates the cache (never checks new tweets / never updates data for old tweets)
+	//   2. Saves tweet to disk for no reason, could just be directly funneled out the tweetEntryChan
 	cwd, err := os.Getwd()
 	if err != nil {
-		return []twitter.Tweet{}, nil
+		return nil
 	}
-	tweetDir := path.Join(cwd, "data", username)
+	for _, username := range usernames {
+		tweetDir := path.Join(cwd, "data", username)
 
-	if _, err := os.Stat(tweetDir); os.IsNotExist(err) {
-		err = os.MkdirAll(tweetDir, DEFAULT_PERMS)
-		if err != nil {
-			return []twitter.Tweet{}, err
+		if _, err := os.Stat(tweetDir); os.IsNotExist(err) {
+			err = os.MkdirAll(tweetDir, DEFAULT_PERMS)
+			if err != nil {
+				return err
+			}
+
+			if err = fetchTweets(client, username, tweetDir); err != nil {
+				return err
+			}
 		}
 
-		err = fetchTweets(
-			client,
-			username,
-			tweetDir,
-		)
+		files, err := ioutil.ReadDir(tweetDir)
 		if err != nil {
-			return []twitter.Tweet{}, err
+			return nil
+		}
+
+		for _, file := range files {
+			tweet, err := readTweet(path.Join(tweetDir, file.Name()))
+			if err != nil {
+				return err
+			}
+			tweetEntryChan <- module.TweetEntry{
+				Username: username,
+				Tweet: tweet,
+			}
 		}
 	}
 
-	files, err := ioutil.ReadDir(tweetDir)
-	if err != nil {
-		return []twitter.Tweet{}, nil
-	}
-
-	tweets := make([]twitter.Tweet, len(files))
-	for i, file := range files {
-		tweet, err := readTweet(
-			path.Join(tweetDir, file.Name()),
-		)
-		if err != nil {
-			return []twitter.Tweet{}, err
-		}
-		tweets[i] = tweet
-	}
-
-	return tweets, nil
+	close(tweetEntryChan)
+	return nil
 }

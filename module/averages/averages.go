@@ -3,9 +3,26 @@ package averages
 import (
 	"os"
 
-	"github.com/dghubble/go-twitter/twitter"
 	"github.com/jedib0t/go-pretty/v6/table"
+
+	"github.com/crockeo/twinalysis/module"
 )
+
+type tweetStats struct {
+	tweetCount int
+	favorites  int
+	retweets   int
+	replies    int
+	quotes     int
+}
+
+func (ts *tweetStats) addTweetEntry(tweetEntry module.TweetEntry) {
+	ts.tweetCount += 1
+	ts.favorites += tweetEntry.Tweet.FavoriteCount
+	ts.retweets += tweetEntry.Tweet.RetweetCount
+	ts.replies += tweetEntry.Tweet.ReplyCount
+	ts.quotes += tweetEntry.Tweet.QuoteCount
+}
 
 type Averages struct {
 }
@@ -14,35 +31,31 @@ func (a Averages) Name() string {
 	return "averages"
 }
 
-func (a Averages) AnalyzeTweets(tweetsByUsername map[string][]twitter.Tweet) error {
+func (a Averages) AnalyzeTweets(tweetEntryChan <-chan module.TweetEntry) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 	t.AppendHeader(
 		table.Row{"Username", "Tweets", "Favorites", "Retweets", "Replies", "Quotes"},
 	)
-	for username, tweets := range tweetsByUsername {
-		tweetCount := 0
-		favorites := 0
-		retweets := 0
-		replies := 0
-		quotes := 0
-		for _, tweet := range tweets {
-			tweetCount++
-			favorites += tweet.FavoriteCount
-			retweets += tweet.RetweetCount
-			replies += tweet.ReplyCount
-			quotes += tweet.QuoteCount
-		}
 
-		norm := float32(len(tweets))
+	tweetStatsByUsername := map[string]*tweetStats{}
+	for tweetEntry := range tweetEntryChan {
+		if _, ok := tweetStatsByUsername[tweetEntry.Username]; !ok {
+			tweetStatsByUsername[tweetEntry.Username] = &tweetStats{}
+		}
+		tweetStatsByUsername[tweetEntry.Username].addTweetEntry(tweetEntry)
+	}
+
+	for username, tweetStats := range tweetStatsByUsername {
+		norm := float32(tweetStats.tweetCount)
 		t.AppendRow(
 			table.Row{
 				username,
-				tweetCount,
-				float32(favorites) / norm,
-				float32(retweets) / norm,
-				float32(replies) / norm,
-				float32(quotes) / norm,
+				tweetStats.tweetCount,
+				float32(tweetStats.favorites) / norm,
+				float32(tweetStats.retweets) / norm,
+				float32(tweetStats.replies) / norm,
+				float32(tweetStats.quotes) / norm,
 			},
 		)
 	}

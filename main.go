@@ -74,26 +74,19 @@ func main() {
 		return
 	}
 
-	module, err := getModule(os.Args[1])
+	mod, err := getModule(os.Args[1])
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	tweetsByUsername := map[string][]twitter.Tweet{}
-	for _, username := range os.Args[2:] {
-		tweets, err := tweets.CollectTweets(client, username)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		tweetsByUsername[username] = tweets
-	}
+	tweetEntryChan := make(chan module.TweetEntry, 10)
+	// TODO: Manage tweetEntryChan from main.go (instead of within CollectTweets)
 
-	err = (*module).AnalyzeTweets(tweetsByUsername)
+	// TODO: Retrieve errors from CollectTweets
+	go tweets.CollectTweets(client, tweetEntryChan, os.Args[2:])
+	err = (*mod).AnalyzeTweets(tweetEntryChan)
 	if err != nil {
-		fmt.Println(err)
-		return
+		panic(err)
 	}
-
 }
