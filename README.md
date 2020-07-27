@@ -4,6 +4,15 @@ Learning Golang to analyze tweets!
 
 ## Benchmarking
 
+Totally non-scientific benchmarking by running `time` once against:
+
+```sh
+$ rm -rf data
+$ time go run main.go averages <3 users>
+```
+
+The 3 users had ~850, ~2500, and ~300 tweets respectively. Note that this was done so poorly as to include compile time...oops. :)
+
 | Description | Commit | Performance |
 |-------------|--------|-------------|
 | multithreading | c2d5b124f8ada821e53d275cc5581ce24101a217 | 1.64s user 1.56s system 22% cpu 14.411 total |
