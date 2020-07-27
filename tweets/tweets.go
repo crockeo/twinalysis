@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"sync"
 
 	"github.com/dghubble/go-twitter/twitter"
 
@@ -106,46 +107,67 @@ func CollectTweets(client *twitter.Client, tweetEntryChan chan<- module.TweetEnt
 		return err
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(len(usernames))
+
+	errChan := make(chan error)
+	defer close(errChan)
+
 	for _, username := range usernames {
-		cacheDir := path.Join(cwd, "data", username)
-		files, err := ioutil.ReadDir(cacheDir)
-		if err != nil {
-			err = os.MkdirAll(cacheDir, DEFAULT_PERMS)
+		go func(username string) {
+			defer wg.Done()
+
+			cacheDir := path.Join(cwd, "data", username)
+			files, err := ioutil.ReadDir(cacheDir)
 			if err != nil {
-				return err
+				err = os.MkdirAll(cacheDir, DEFAULT_PERMS)
+				if err != nil {
+					errChan <- err
+					return
+				}
+				files = []os.FileInfo{}
 			}
-			files = []os.FileInfo{}
-		}
 
-		// reads contents of existing cache
-		var maxCachedID int64
-		for _, file := range files {
-			contents, err := ioutil.ReadFile(path.Join(cacheDir, file.Name()))
+			// reads contents of existing cache
+			var maxCachedID int64
+			for _, file := range files {
+				contents, err := ioutil.ReadFile(path.Join(cacheDir, file.Name()))
+				if err != nil {
+					errChan <- err
+					return
+				}
+
+				var tweet twitter.Tweet
+				err = json.Unmarshal(contents, &tweet)
+				if err != nil {
+					errChan <- err
+					return
+				}
+
+				tweetEntryChan <- module.TweetEntry{
+					Tweet:    tweet,
+					Username: username,
+				}
+
+				if maxCachedID < tweet.ID {
+					maxCachedID = tweet.ID
+				}
+			}
+
+			// fetches new tweets after the provided ID
+			err = fetchTweets(client, tweetEntryChan, username, cacheDir, maxCachedID)
 			if err != nil {
-				return err
+				errChan <- err
 			}
-
-			var tweet twitter.Tweet
-			err = json.Unmarshal(contents, &tweet)
-			if err != nil {
-				return err
-			}
-
-			tweetEntryChan <- module.TweetEntry{
-				Tweet:    tweet,
-				Username: username,
-			}
-
-			if maxCachedID < tweet.ID {
-				maxCachedID = tweet.ID
-			}
-		}
-
-		// fetches new tweets after the provided ID
-		err = fetchTweets(client, tweetEntryChan, username, cacheDir, maxCachedID)
-		if err != nil {
-			return err
-		}
+		}(username)
 	}
+
+	wg.Wait()
+	select {
+	case err = <- errChan:
+		return err
+	default:
+	}
+
 	return nil
 }
