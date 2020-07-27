@@ -3,8 +3,8 @@ package module
 import "github.com/dghubble/go-twitter/twitter"
 
 type TweetEntry struct {
-	Username string
 	Tweet    twitter.Tweet
+	Username string
 }
 
 type Module interface {
